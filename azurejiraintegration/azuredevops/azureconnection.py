@@ -9,7 +9,18 @@ from azure.devops.v7_1.git.models import GitQueryCommitsCriteria, GitPullRequest
 from types import SimpleNamespace
 from datetime import timedelta, timezone, datetime
 import pandas as pd
+import pytz
     
+PullRequestStatus = {
+    "abandoned" : "DECLINED",
+    "active" : "OPEN",
+    "completed" : "MERGED"
+}
+
+
+utc=pytz.UTC
+
+
 def formatDate(inputDate):
     outputString = pd.to_datetime(inputDate, utc=True).strftime('%Y-%m-%dT%H:%M:%S+00:00')
 
@@ -23,6 +34,14 @@ class AzureConnection():
             creds=BasicAuthentication('PAT', auth_token)
         )
         self.git_client = self.context.connection.clients.get_git_client()
+        self.repositoryWhitelist = []
+        self.repositoryBlackList = []
+        self.allowedAzureProjects = []
+        self.minMinutesAgoUpdated = None
+        self.excludeDrafts = False
+
+    def setMinMinutesAgoUpdated(self, minutes):
+        self.minMinutesAgoUpdated = minutes
 
     def setAllowedJiraProjects(self, projectList):
         self.allowedJiraProjects = projectList
@@ -40,7 +59,7 @@ class AzureConnection():
         if (len(projects) == 0):
             raise Exception('Your account doesn''t appear to have any projects available.')
         for project in projects:
-            if project.name in self.allowedAzureProjects:
+            if (project.name in self.allowedAzureProjects) or (len(self.allowedAzureProjects) == 0):
                 totalProjects.append(project)
         return totalProjects
     
@@ -50,8 +69,14 @@ class AzureConnection():
     def setAzureJiraMap(self, map):
         self.azureJiraMap = map
 
-    def setExcludedAzureRepositories(self, repos):
-        self.excludedAzureRepositories = repos
+    def setRepositoryBlacklist(self, repos):
+        self.repositoryBlackList = repos
+
+    def setRepositoryWhitelist(self, repoList):
+        self.repositoryWhitelist = repoList
+
+    def setDraftExclusion(self, excludeDrafts):
+        self.excludeDrafts = excludeDrafts
 
     def createUserJson(self, userName):
         if userName in self.azureJiraMap:
@@ -79,7 +104,7 @@ class AzureConnection():
         threads = self.git_client.get_threads(repo.id, pr.pull_request_id)
         for thread in threads:
             dates.append(thread.last_updated_date)
-        return max(dates).strftime('%Y-%m-%dT%H:%M:%S+00:00')
+        return max(dates).astimezone(utc)
 
 
     def retrievePullRequests(self):
@@ -90,38 +115,46 @@ class AzureConnection():
         for project in projects:
             repos = self.git_client.get_repositories(project.id)
             for repo in repos:
-                if (repo.name in self.excludedAzureRepositories):
+                if (repo.name in self.repositoryBlackList):
+                    continue
+                if (len(self.repositoryWhitelist) > 0) and (repo.name not in self.repositoryWhitelist):
                     continue
                 try:
                     searchCriteria  = GitPullRequestSearchCriteria()
+                    searchCriteria.status = "all"
                     pullRequests = self.git_client.get_pull_requests(repo.id, search_criteria=searchCriteria, top=3)
                 except:
                     continue
                 prList = []
                 for pr in pullRequests:
+                    if (pr.is_draft) and (self.excludeDrafts):
+                        continue
+                    if self.minMinutesAgoUpdated:
+                        if self.retrieveLastUpdatedDate(pr, repo) < (datetime.now().astimezone(utc)-timedelta(minutes=self.minMinutesAgoUpdated)):
+                            continue
                     regexMatch = re.search("[A-Z][A-Z0-9_]+-[1-9][0-9]*", pr.title)
                     if regexMatch:
                         ticketNumber = regexMatch.group()
                         if self.checkAllowedTicket(ticketNumber):
-                            print(f"[{self.retrieveLastUpdatedDate(pr, repo)[0:10]}] --> {pr.created_by.display_name} : {pr.title}")
+                            print(f"[{self.retrieveLastUpdatedDate(pr, repo).strftime('%Y-%m-%d')}] {PullRequestStatus[pr.status]} --> {pr.created_by.display_name} : {pr.title}")
                             prDict = {}
                             prDict["title"] = pr.title
                             prDict["id"] = pr.pull_request_id
                             prDict["url"] = f"{self.organization_url}/{project.name}/_git/{repo.name}/pullrequest/{pr.pull_request_id}"
                             prDict["author"] = self.createUserJson(pr.created_by.display_name)
-                            prDict["status"] = "OPEN" if pr.status == "active" else "CLOSED"
+                            prDict["status"] = PullRequestStatus[pr.status]
                             prDict["issueKeys"] = [str(ticketNumber)]
                             prDict["updateSequenceId"] = int(round(time.time() * 1000))
                             prDict["commentCount"] = len(self.git_client.get_threads(repo.id, pr.pull_request_id))
                             prDict["sourceBranch"] = pr.source_ref_name.split("heads/", 1)[1]
                             prDict["destinationBranch"] = pr.target_ref_name.split("heads/", 1)[1]
                             prDict["displayId"] = str(pr.pull_request_id)
-                            prDict["lastUpdate"] = self.retrieveLastUpdatedDate(pr, repo)
+                            prDict["lastUpdate"] = self.retrieveLastUpdatedDate(pr, repo).strftime('%Y-%m-%dT%H:%M:%S+00:00')
                             prDict["reviewers"] = [self.createReviewerJson(reviewer) for reviewer in pr.reviewers]
                             prList.append(prDict)
                 if len(prList) != 0:
                     fullJson["repositories"].append({"name":repo.name, "url":repo.remote_url, "id": repo.id, "updateSequenceId": int(round(time.time() * 1000)), "pullRequests":prList})
-        print("retrieve Commit time spent:", round(time.time() - start_time,1), "seconds")
+        print("retrieve PR's time spent:", round(time.time() - start_time,1), "seconds")
         return fullJson
 
     def retrieveCommits(self):
@@ -132,9 +165,13 @@ class AzureConnection():
         for project in projects:
             repos = self.git_client.get_repositories(project.id)
             for repo in repos:
-                if (repo.name in self.excludedAzureRepositories):
+                if (repo.name in self.repositoryBlackList):
+                    continue
+                if (len(self.repositoryWhitelist) > 0) and (repo.name not in self.repositoryWhitelist):
                     continue
                 searchCriteria  = GitQueryCommitsCriteria()
+                if self.minMinutesAgoUpdated:
+                    searchCriteria.from_date = datetime.now() - timedelta(minutes=self.minMinutesAgoUpdated)
                 searchCriteria.top = 5
                 try:
                     commits = self.git_client.get_commits(repo.id, search_criteria=searchCriteria)
@@ -154,13 +191,20 @@ class AzureConnection():
                             commitDict["updateSequenceId"] = int(round(time.time() * 1000))
                             commitDict["message"] = commit.comment
                             commitDict["author"] = self.createUserJson(commit.author.name)
-                            commitDict["authorTimestamp"] = commit.author.date.strftime('%Y-%m-%dT%H:%M:%S+00:00')
+                            commitDict["authorTimestamp"] = commit.author.date.astimezone(utc).strftime('%Y-%m-%dT%H:%M:%S+00:00')
                             commitDict["displayId"] = commit.commit_id[0:8]
                             commitDict["fileCount"] = commit.change_counts["Add"] + commit.change_counts["Edit"] + commit.change_counts["Delete"]
                             commitDict["url"] = commit.remote_url
                             commitList.append(commitDict)
                 if len(commitList) != 0:
                     fullJson["repositories"].append({"name":repo.name, "url":repo.remote_url, "id": repo.id, "updateSequenceId": int(round(time.time() * 1000)), "commits":commitList})
-        print("retrieve Commit time spent:", time.time() - start_time, "seconds")
+        print("retrieve commits time spent:", time.time() - start_time, "seconds")
         return fullJson
 
+    def retrieveRepositoryId(self, repositoryName):
+        projects = self.FindProjects()
+        for project in projects:
+            repos = self.git_client.get_repositories(project.id)
+            for repo in repos:
+                if (repo.name == repositoryName):
+                    return repo.id

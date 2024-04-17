@@ -19,6 +19,9 @@ class JiraConnection:
         return access_token
 
     def postDevelopmentInformation(self, payload):
+        if len(payload["repositories"]) == 0:
+            return
+    
         access_token = self.retrieveOAuthToken()
 
         url = f"https://api.atlassian.com/jira/devinfo/0.1/cloud/{self.cloudId}/bulk"
@@ -34,6 +37,32 @@ class JiraConnection:
             url,
             data=json.dumps(payload),
             headers=headers
+        )
+
+        if (response.status_code != 202):
+            print(response.__dict__)
+            print("-------------")
+            print(response.request.body)
+        else:
+            print(f"Upload to development information successful!: {response.status_code}!")
+
+    def removeDevelopmentInformation(self, repoId, entityType, entityId):
+        if (entityType not in ["commit", "branch", "pull_request"]):
+            print("entity type should be in:", ["commit", "branch", "pull_request"])
+            return 
+        
+        access_token = self.retrieveOAuthToken()
+
+        requestHeaders = {
+            "Authorization": "Bearer {}".format(access_token),
+        }
+
+        url = f"https://your-domain.atlassian.net/rest/devinfo/0.10/repository/{repoId}/{entityType}/{entityId}"
+
+        response = requests.request(
+            "DELETE",
+            url,
+            headers=requestHeaders
         )
 
         if (response.status_code != 202):

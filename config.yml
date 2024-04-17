@@ -1,0 +1,18 @@
+Azure:
+  organization_url: "<PUT YOUR ORGANIZATION URL HERE>"
+  auth_token: "<PUT YOUR AZURE AUTH TOKEN HERE>"
+  projects_whitelist: ["PROJECT_NAME"]
+  repository_blacklist: ["REPO_NAME"]
+  exclude_draft_pr: true
+  min_minutes_ago_updated: 15
+
+Jira:
+  cloud_id: "<PUT YOUR JIRA CLOUD ID HERE>"
+  client_id: "<PUT YOUR OAUTH CLIENT ID HERE>"
+  client_secret: "<PUT YOUR OAUTH CLIENT SECRET HERE>"
+  team_whitelist: ["ABC"]
+
+General:
+  debug: true
+  update_timer: 600 # time between updates in seconds
+  updated_properties: ["commit", "pull_request", "branch"]
