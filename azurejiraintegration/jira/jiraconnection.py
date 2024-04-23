@@ -13,7 +13,6 @@ class JiraConnection:
         }
 
         response = requests.post('https://auth.atlassian.com/oauth/token', data=data_request, allow_redirects=False, auth=(self.clientId, self.clientSecret))
-        print("token response code: ", response.status_code)
         token = json.loads(response.text)
         access_token = token['access_token']
         return access_token
@@ -40,6 +39,7 @@ class JiraConnection:
         )
 
         if (response.status_code != 202):
+            print("Error in uploading to development information:")
             print(response.__dict__)
             print("-------------")
             print(response.request.body)

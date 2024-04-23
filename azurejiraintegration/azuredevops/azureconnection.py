@@ -122,7 +122,7 @@ class AzureConnection():
                 try:
                     searchCriteria  = GitPullRequestSearchCriteria()
                     searchCriteria.status = "all"
-                    pullRequests = self.git_client.get_pull_requests(repo.id, search_criteria=searchCriteria, top=3)
+                    pullRequests = self.git_client.get_pull_requests(repo.id, search_criteria=searchCriteria, top=7)
                 except:
                     continue
                 prList = []
@@ -180,6 +180,8 @@ class AzureConnection():
                 commitList = []
                 
                 for commit in reversed(commits):
+                    if "Merge pull request" in commit.comment:
+                        continue
                     regexMatch = re.search("[A-Z][A-Z0-9_]+-[1-9][0-9]*", commit.comment)
                     if regexMatch:
                         ticketNumber = regexMatch.group()
