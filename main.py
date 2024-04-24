@@ -7,7 +7,7 @@ from time import sleep
 from users import GitUsers
 import logging
 
-
+logger = logging.getLogger("azurejiraintegration")
 YAML_FILE_NAME = "config.yml"
 
 def updateDateInConfig(config):
@@ -20,10 +20,10 @@ def runTimingLoop(config, azure, jira):
     if 'update_timer' in config['General']:
         secondSleep = config['General']['update_timer']
     while(1):
-        logging.debug(f" --- {datetime.now()} ---")
-        logging.debug("### Pull Requests ###")
+        logger.debug(f" --- {datetime.now()} ---")
+        logger.debug("### Pull Requests ###")
         jira.postDevelopmentInformation(azure.retrievePullRequests())
-        logging.debug("### Commits ###")
+        logger.debug("### Commits ###")
         jira.postDevelopmentInformation(azure.retrieveCommits())
         azure.setMinMinutesAgoUpdated(config['Azure']['min_minutes_ago_updated'])
         updateDateInConfig(config)
@@ -35,7 +35,7 @@ if __name__ == "__main__":
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt='%Y-%m-%d %H:%M:%S'
     )
-    logger = logging.getLogger("azurejiraintegration")
+    
     
     with open(YAML_FILE_NAME, 'r') as file:
         config = yaml.safe_load(file)
