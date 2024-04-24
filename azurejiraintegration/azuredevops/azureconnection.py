@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from datetime import timedelta, timezone, datetime
 import pandas as pd
 import pytz
+import logging
     
 PullRequestStatus = {
     "abandoned" : "DECLINED",
@@ -17,9 +18,8 @@ PullRequestStatus = {
     "completed" : "MERGED"
 }
 
-
 utc=pytz.UTC
-
+logger = logging.getLogger("azurejiraintegration")
 
 def formatDate(inputDate):
     outputString = pd.to_datetime(inputDate, utc=True).strftime('%Y-%m-%dT%H:%M:%S+00:00')
@@ -82,7 +82,7 @@ class AzureConnection():
         if userName in self.azureJiraMap:
             userDict = {"accountId" : self.azureJiraMap[userName]}
         else:
-            print(userName, " is not in GitUsers dictionary")
+            logger.warning(userName, " is not in GitUsers dictionary")
             userDict = {"name" : userName}
         return userDict
     
@@ -90,7 +90,7 @@ class AzureConnection():
         if reviewer.display_name in self.azureJiraMap:
             reviewerDict = {"accountId" : self.azureJiraMap[reviewer.display_name]}
         else:
-            print(reviewer.display_name, " is not in GitUsers dictionary")
+            logger.warning(reviewer.display_name, " is not in GitUsers dictionary")
             reviewerDict = {"name" : reviewer.display_name}
         reviewerDict["approvalStatus"] = "APPROVED" if reviewer.vote == 10 else "UNAPPROVED"
         return reviewerDict
@@ -132,18 +132,17 @@ class AzureConnection():
                     if self.minMinutesAgoUpdated:
                         if self.retrieveLastUpdatedDate(pr, repo) < (datetime.now().astimezone(utc)-timedelta(minutes=self.minMinutesAgoUpdated)):
                             continue
-                    regexMatch = re.search("[A-Z][A-Z0-9_]+-[1-9][0-9]*", pr.title)
-                    if regexMatch:
-                        ticketNumber = regexMatch.group()
-                        if self.checkAllowedTicket(ticketNumber):
-                            print(f"[{self.retrieveLastUpdatedDate(pr, repo).strftime('%Y-%m-%d')}] {PullRequestStatus[pr.status]} --> {pr.created_by.display_name} : {pr.title}")
+                    ticketNumbers = re.findall("[A-Z][A-Z0-9_]+-[1-9][0-9]*", pr.title)
+                    if ticketNumbers:
+                        if self.checkAllowedTicket(ticketNumbers[0]):
+                            logger.debug(f"[{self.retrieveLastUpdatedDate(pr, repo).strftime('%Y-%m-%d')}] {PullRequestStatus[pr.status]} --> {pr.created_by.display_name} : {pr.title}")
                             prDict = {}
                             prDict["title"] = pr.title
                             prDict["id"] = pr.pull_request_id
                             prDict["url"] = f"{self.organization_url}/{project.name}/_git/{repo.name}/pullrequest/{pr.pull_request_id}"
                             prDict["author"] = self.createUserJson(pr.created_by.display_name)
                             prDict["status"] = PullRequestStatus[pr.status]
-                            prDict["issueKeys"] = [str(ticketNumber)]
+                            prDict["issueKeys"] = ticketNumbers
                             prDict["updateSequenceId"] = int(round(time.time() * 1000))
                             prDict["commentCount"] = len(self.git_client.get_threads(repo.id, pr.pull_request_id))
                             prDict["sourceBranch"] = pr.source_ref_name.split("heads/", 1)[1]
@@ -154,7 +153,7 @@ class AzureConnection():
                             prList.append(prDict)
                 if len(prList) != 0:
                     fullJson["repositories"].append({"name":repo.name, "url":repo.remote_url, "id": repo.id, "updateSequenceId": int(round(time.time() * 1000)), "pullRequests":prList})
-        print("retrieve PR's time spent:", round(time.time() - start_time,1), "seconds")
+        logger.debug(f"retrieve PR's time spent: {time.time() - start_time} seconds")
         return fullJson
 
     def retrieveCommits(self):
@@ -186,7 +185,7 @@ class AzureConnection():
                     if regexMatch:
                         ticketNumber = regexMatch.group()
                         if self.checkAllowedTicket(ticketNumber):
-                            print(f"[{commit.author.date.strftime('%Y-%m-%d')}] --> {commit.author.name} : {commit.comment}")
+                            logger.debug(f"[{commit.author.date.strftime('%Y-%m-%d')}] --> {commit.author.name} : {commit.comment}")
                             commitDict = {}
                             commitDict["issueKeys"] = [str(ticketNumber)]
                             commitDict["id"] = commit.commit_id
@@ -200,7 +199,7 @@ class AzureConnection():
                             commitList.append(commitDict)
                 if len(commitList) != 0:
                     fullJson["repositories"].append({"name":repo.name, "url":repo.remote_url, "id": repo.id, "updateSequenceId": int(round(time.time() * 1000)), "commits":commitList})
-        print("retrieve commits time spent:", time.time() - start_time, "seconds")
+        logger.debug(f"retrieve commits time spent: {time.time() - start_time} seconds")
         return fullJson
 
     def retrieveRepositoryId(self, repositoryName):

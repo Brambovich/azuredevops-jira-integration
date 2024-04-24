@@ -1,5 +1,8 @@
 import requests
 import json
+import logging
+
+logger = logging.getLogger("azurejiraintegration")
 
 class JiraConnection:
     def __init__(self, clientID, clientSecret, clientCloudId):
@@ -39,16 +42,16 @@ class JiraConnection:
         )
 
         if (response.status_code != 202):
-            print("Error in uploading to development information:")
-            print(response.__dict__)
-            print("-------------")
-            print(response.request.body)
+            logger.error("Error in uploading to development information:")
+            logger.error(response.__dict__)
+            logger.error("-------------")
+            logger.error(response.request.body)
         else:
-            print(f"Upload to development information successful!: {response.status_code}!")
+            logger.debug(f"Upload to development information successful!: {response.status_code}!")
 
     def removeDevelopmentInformation(self, repoId, entityType, entityId):
         if (entityType not in ["commit", "branch", "pull_request"]):
-            print("entity type should be in:", ["commit", "branch", "pull_request"])
+            logger.error("entity type should be in:", ["commit", "branch", "pull_request"])
             return 
         
         access_token = self.retrieveOAuthToken()
@@ -66,8 +69,8 @@ class JiraConnection:
         )
 
         if (response.status_code != 202):
-            print(response.__dict__)
-            print("-------------")
-            print(response.request.body)
+            logger.error(response.__dict__)
+            logger.error("-------------")
+            logger.error(response.request.body)
         else:
-            print(f"Upload to development information successful!: {response.status_code}!")
+            logger.info(f"Remove from development information successful!: {response.status_code}!")
