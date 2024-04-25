@@ -92,7 +92,7 @@ class AzureConnection():
         else:
             logger.warning(reviewer.display_name, " is not in GitUsers dictionary")
             reviewerDict = {"name" : reviewer.display_name}
-        reviewerDict["approvalStatus"] = "APPROVED" if reviewer.vote == 10 else "UNAPPROVED"
+        reviewerDict["approvalStatus"] = "APPROVED" if reviewer.vote > 0 else "UNAPPROVED"
         return reviewerDict
 
     def retrieveLastUpdatedDate(self, pr, repo):
