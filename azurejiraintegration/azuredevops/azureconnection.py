@@ -106,6 +106,14 @@ class AzureConnection():
             dates.append(thread.last_updated_date)
         return max(dates).astimezone(utc)
 
+    def retrieveNumberOfComments(self, pr, repo):
+        noOfComments = 0
+        threads = self.git_client.get_threads(repo.id, pr.pull_request_id)
+        for trd in threads:
+            if trd.properties:
+                if 'Microsoft.TeamFoundation.Discussion.SupportsMarkdown' in trd.properties:
+                    noOfComments = noOfComments + 1
+        return noOfComments
 
     def retrievePullRequests(self):
         start_time = time.time()
@@ -144,7 +152,7 @@ class AzureConnection():
                             prDict["status"] = PullRequestStatus[pr.status]
                             prDict["issueKeys"] = ticketNumbers
                             prDict["updateSequenceId"] = int(round(time.time() * 1000))
-                            prDict["commentCount"] = len(self.git_client.get_threads(repo.id, pr.pull_request_id))
+                            prDict["commentCount"] = self.retrieveNumberOfComments(pr, repo)
                             prDict["sourceBranch"] = pr.source_ref_name.split("heads/", 1)[1]
                             prDict["destinationBranch"] = pr.target_ref_name.split("heads/", 1)[1]
                             prDict["displayId"] = str(pr.pull_request_id)
