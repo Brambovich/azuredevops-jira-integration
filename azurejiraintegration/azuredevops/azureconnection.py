@@ -82,7 +82,7 @@ class AzureConnection():
         if userName in self.azureJiraMap:
             userDict = {"accountId" : self.azureJiraMap[userName]}
         else:
-            logger.warning(userName, " is not in GitUsers dictionary")
+            logger.warning(f"{userName} is not in GitUsers dictionary")
             userDict = {"name" : userName}
         return userDict
     
@@ -90,7 +90,7 @@ class AzureConnection():
         if reviewer.display_name in self.azureJiraMap:
             reviewerDict = {"accountId" : self.azureJiraMap[reviewer.display_name]}
         else:
-            logger.warning(reviewer.display_name, " is not in GitUsers dictionary")
+            logger.warning(f"{reviewer.display_name} is not in GitUsers dictionary")
             reviewerDict = {"name" : reviewer.display_name}
         reviewerDict["approvalStatus"] = "APPROVED" if reviewer.vote > 0 else "UNAPPROVED"
         return reviewerDict
@@ -217,3 +217,4 @@ class AzureConnection():
             for repo in repos:
                 if (repo.name == repositoryName):
                     return repo.id
+                
