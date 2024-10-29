@@ -217,4 +217,32 @@ class AzureConnection():
             for repo in repos:
                 if (repo.name == repositoryName):
                     return repo.id
-                
+    
+    def retrieveSpecificPullRequest(self, pullRequestId):
+        print(pullRequestId)
+        fullJson = {}
+        fullJson["repositories"] = []
+        try:
+            pr = self.git_client.get_pull_request_by_id(pullRequestId)
+        except:
+            logger.error(f"Pull request with id: {pullRequestId} could not be found!")
+            return fullJson
+        ticketNumbers = re.findall("[A-Z][A-Z0-9_]+-[1-9][0-9]*", pr.title)
+        if ticketNumbers:
+            prDict = {}
+            prDict["title"] = pr.title
+            prDict["id"] = pr.pull_request_id
+            prDict["url"] = f"{self.organization_url}/{pr.repository.project.name}/_git/{pr.repository.name}/pullrequest/{pr.pull_request_id}"
+            prDict["author"] = self.createUserJson(pr.created_by.display_name)
+            prDict["status"] = PullRequestStatus[pr.status]
+            prDict["issueKeys"] = ticketNumbers
+            prDict["updateSequenceId"] = int(round(time.time() * 1000))
+            prDict["commentCount"] = self.retrieveNumberOfComments(pr, pr.repository)
+            prDict["sourceBranch"] = pr.source_ref_name.split("heads/", 1)[1]
+            prDict["destinationBranch"] = pr.target_ref_name.split("heads/", 1)[1]
+            prDict["displayId"] = str(pr.pull_request_id)
+            prDict["lastUpdate"] = self.retrieveLastUpdatedDate(pr, pr.repository).strftime('%Y-%m-%dT%H:%M:%S+00:00')
+            prDict["reviewers"] = [self.createReviewerJson(reviewer) for reviewer in pr.reviewers]
+            fullJson["repositories"].append({"name":pr.repository.name, "url":pr.repository.remote_url, "id": pr.repository.id, "updateSequenceId": int(round(time.time() * 1000)), "pullRequests":[prDict]})
+            return fullJson
+
